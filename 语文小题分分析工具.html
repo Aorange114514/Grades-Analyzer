@@ -349,7 +349,14 @@ const Utils = {
     t.innerHTML = html.trim();
     return t.content.firstElementChild;
   },
-  clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+  clamp(v,min,max){ return Math.max(min, Math.min(max, v)); },
+  // 标准题号展示标签：板块 + 题型 + 空格 + 题号，如「现代文（一）选择 3」；题型缺失时退化为「板块 空格 题号」
+  stdLabel(section, no, type){
+    const sec = section||'';
+    const t = type||'';
+    const prefix = sec+t;
+    return prefix? (prefix+' '+no) : String(no);
+  }
 };
 
 /* ---------------------------- Toast / Dialog ---------------------------- */
@@ -906,13 +913,13 @@ const Ledger = {
     exams.forEach(ex=> ex.subjectItems.forEach(it=>{
       if(it.standardNo && it.isCounted){
         const key = (it.section||'')+'|'+it.standardNo;
-        if(!seen.has(key)){ seen.add(key); stdKeys.push({key, section:it.section||'', no:it.standardNo}); }
+        if(!seen.has(key)){ seen.add(key); stdKeys.push({key, section:it.section||'', no:it.standardNo, itemType:it.itemType||''}); }
       }
     }));
     stdKeys.sort((a,b)=> (a.section+String(a.no).padStart(4,'0')).localeCompare(b.section+String(b.no).padStart(4,'0')));
     const header = ['标准题号'].concat(exams.map(ex=> ex.name+'('+ex.date+')'));
     const rows = stdKeys.map(sk=>{
-      const row = [sk.section?(sk.section+' '+sk.no):sk.no];
+      const row = [Utils.stdLabel(sk.section, sk.no, sk.itemType)];
       exams.forEach(ex=>{
         const its = ex.subjectItems.filter(it=> it.isCounted && it.standardNo===sk.no && (it.section||'')===sk.section);
         if(its.length===0){ row.push('缺考'); return; }
@@ -1733,7 +1740,7 @@ Views.Import = {
             template.map(t=>{
               const key = t.section+'|'+t.no;
               const sel = (ic.standardSection===t.section && ic.standardNo===t.no)?'selected':'';
-              return '<option value="'+Utils.escapeHtml(key)+'" '+sel+'>'+Utils.escapeHtml(t.section+' '+t.no)+'</option>';
+              return '<option value="'+Utils.escapeHtml(key)+'" '+sel+'>'+Utils.escapeHtml(Utils.stdLabel(t.section, t.no, t.type))+'</option>';
             })
           ).join('');
           return '<tr><td>'+ic.seq+'</td><td>'+Utils.escapeHtml(ic.itemName)+'</td><td class="num">'+(ic.fullScore===null?'—':ic.fullScore)+'</td>'+
@@ -1747,7 +1754,7 @@ Views.Import = {
             const items = template.filter(t=>t.section===sec);
             return '<h4>'+Utils.escapeHtml(sec)+'</h4>'+items.map(t=>{
               const boundSeqs = counted.filter(ic=> ic.standardSection===sec && ic.standardNo===t.no).map(ic=>ic.seq).join(',');
-              return '<div class="mapItemRow"><span style="width:110px;">'+Utils.escapeHtml(sec+' '+t.no)+'</span>'+
+              return '<div class="mapItemRow"><span style="width:110px;">'+Utils.escapeHtml(Utils.stdLabel(sec, t.no, t.type))+'</span>'+
                 '<input type="text" class="mapInputB" data-section="'+Utils.escapeHtml(sec)+'" data-no="'+Utils.escapeHtml(String(t.no))+'" value="'+Utils.escapeHtml(boundSeqs)+'" placeholder="如 1,2 对应本次序号"></div>';
             }).join('');
           }).join('') +
@@ -1758,7 +1765,7 @@ Views.Import = {
             return '<div class="mapItemRow'+(used?' used':'')+'">'+
               '<span class="pill">'+ic.seq+'</span> '+Utils.escapeHtml(ic.itemName)+
               ' <span style="color:#6b6a64;">('+(ic.fullScore===null?'—':ic.fullScore)+'分)</span>'+
-              (used? '<span class="badge ok" style="margin-left:6px;">已对应 '+Utils.escapeHtml(ic.standardSection+' '+ic.standardNo)+'</span>':'')+
+              (used? '<span class="badge ok" style="margin-left:6px;">已对应 '+Utils.escapeHtml(Utils.stdLabel(ic.standardSection, ic.standardNo, (Parser.findTemplateBySeqNo(template, ic.standardNo)||{}).type))+'</span>':'')+
               '</div>';
           }).join('') +
         '</div>'+
@@ -2047,7 +2054,7 @@ Views.Portrait = {
         weakRows.map(w=>'<tr class="rowWeak"><td>'+Utils.escapeHtml(w.item.itemName)+'</td><td class="num cellWeak">'+Utils.fmtPct(w.selfRate,1)+'</td><td class="num">'+Utils.fmtPct(w.classRate,1)+'</td><td class="num cellWeak">'+Utils.fmtPct(w.diff,1)+'</td></tr>').join('')+
         '</tbody></table></div></div>' : '') +
       (histWeak.length? '<div class="card"><h3>历史薄弱题 <span class="sub">跨考试统计</span></h3><div class="tableWrap"><table><thead><tr><th>标准题号</th><th class="num">出现次数</th><th class="num">低于阈值次数</th><th class="num">平均得分率</th><th class="num">阈值</th></tr></thead><tbody>'+
-        histWeak.map(w=>'<tr class="rowWeak"><td>'+Utils.escapeHtml(w.section+' '+w.no)+'</td><td class="num">'+w.occur+'</td><td class="num cellWeak">'+w.belowCount+'</td><td class="num">'+Utils.fmtPct(w.avgRate,1)+'</td><td class="num">'+Utils.fmtPct(w.threshold,1)+'</td></tr>').join('')+
+        histWeak.map(w=>'<tr class="rowWeak"><td>'+Utils.escapeHtml(Utils.stdLabel(w.section, w.no, w.itemType))+'</td><td class="num">'+w.occur+'</td><td class="num cellWeak">'+w.belowCount+'</td><td class="num">'+Utils.fmtPct(w.avgRate,1)+'</td><td class="num">'+Utils.fmtPct(w.threshold,1)+'</td></tr>').join('')+
         '</tbody></table></div></div>' : '') +
       '<div class="card"><h3>本人得分率 vs 班级平均得分率</h3><div class="chartBox tall"><canvas id="chartPortraitBar"></canvas></div></div>'+
       '<div class="card"><h3>逐题对照</h3><div class="tableWrap"><table><thead><tr><th>小题</th><th class="num">满分</th><th class="num">本人得分</th><th class="num">本人得分率</th><th class="num">班均得分率</th><th class="num">差值</th><th>判定</th></tr></thead><tbody>'+
@@ -2093,7 +2100,7 @@ Views.History = {
       '<option value="'+Utils.escapeHtml(s.sid)+'" '+(s.sid===AppState.historySid?'selected':'')+'>'+Utils.escapeHtml(s.name)+'（'+Utils.escapeHtml(s.className)+'）</option>').join('');
     const itemOptions = stdKeys.map(k=>{
       const key = k.section+'|'+k.no;
-      return '<option value="'+Utils.escapeHtml(key)+'" '+(key===AppState.historyStdNo?'selected':'')+'>'+Utils.escapeHtml(k.section+' '+k.no)+'</option>';
+      return '<option value="'+Utils.escapeHtml(key)+'" '+(key===AppState.historyStdNo?'selected':'')+'>'+Utils.escapeHtml(Utils.stdLabel(k.section, k.no, k.itemType))+'</option>';
     }).join('');
 
     root.innerHTML =
@@ -2157,13 +2164,13 @@ Views.History = {
     const personal = Stats.studentHistoryWeakItems(sid);
     document.getElementById('histPersonalWeakBox').innerHTML = personal.length?
       '<div class="tableWrap"><table><thead><tr><th>标准题号</th><th class="num">出现次数</th><th class="num">低于阈值次数</th><th class="num">平均得分率</th><th class="num">阈值</th></tr></thead><tbody>'+
-      personal.map(w=>'<tr class="rowWeak"><td>'+Utils.escapeHtml(w.section+' '+w.no)+'</td><td class="num">'+w.occur+'</td><td class="num cellWeak">'+w.belowCount+'</td><td class="num">'+Utils.fmtPct(w.avgRate,1)+'</td><td class="num">'+Utils.fmtPct(w.threshold,1)+'</td></tr>').join('')+
+      personal.map(w=>'<tr class="rowWeak"><td>'+Utils.escapeHtml(Utils.stdLabel(w.section, w.no, w.itemType))+'</td><td class="num">'+w.occur+'</td><td class="num cellWeak">'+w.belowCount+'</td><td class="num">'+Utils.fmtPct(w.avgRate,1)+'</td><td class="num">'+Utils.fmtPct(w.threshold,1)+'</td></tr>').join('')+
       '</tbody></table></div>' : '<div class="emptyState">暂无历史薄弱题</div>';
 
     const classWeak = Stats.classHistoryWeakItems(className);
     document.getElementById('histClassWeakBox').innerHTML = classWeak.length?
       '<div class="tableWrap"><table><thead><tr><th>标准题号</th><th class="num">出现次数</th><th class="num">低于阈值次数</th><th class="num">班级平均得分率</th><th class="num">阈值</th></tr></thead><tbody>'+
-      classWeak.map(w=>'<tr class="rowWeak"><td>'+Utils.escapeHtml(w.section+' '+w.no)+'</td><td class="num">'+w.occur+'</td><td class="num cellWeak">'+w.belowCount+'</td><td class="num">'+Utils.fmtPct(w.avgRate,1)+'</td><td class="num">'+Utils.fmtPct(w.threshold,1)+'</td></tr>').join('')+
+      classWeak.map(w=>'<tr class="rowWeak"><td>'+Utils.escapeHtml(Utils.stdLabel(w.section, w.no, w.itemType))+'</td><td class="num">'+w.occur+'</td><td class="num cellWeak">'+w.belowCount+'</td><td class="num">'+Utils.fmtPct(w.avgRate,1)+'</td><td class="num">'+Utils.fmtPct(w.threshold,1)+'</td></tr>').join('')+
       '</tbody></table></div>' : '<div class="emptyState">暂无班级总体薄弱题</div>';
   },
 
@@ -2188,7 +2195,7 @@ Views.History = {
       const avgRate = Utils.mean(hist.map(h=>h.rate));
       const belowCount = hist.filter(h=>h.rate<th).length;
       const isWeakRow = personalWeakSet.has(sk.section+'|'+sk.no);
-      return '<tr class="'+(isWeakRow?'rowWeak':'')+'"><td>'+Utils.escapeHtml(sk.section+' '+sk.no)+'</td>'+cells+
+      return '<tr class="'+(isWeakRow?'rowWeak':'')+'"><td>'+Utils.escapeHtml(Utils.stdLabel(sk.section, sk.no, sk.itemType))+'</td>'+cells+
         '<td class="num">'+Utils.fmtPct(avgRate,1)+'</td><td class="num">'+belowCount+' / '+hist.length+'</td></tr>';
     }).join('');
     document.getElementById('histMatrixBox').innerHTML =
@@ -2537,7 +2544,7 @@ const Export = {
     XLSX.utils.book_append_sheet(wb, Export.sheetFromAoa(weakAoa,[16,12,12],[{s:{r:0,c:0},e:{r:0,c:2}}]), '薄弱题清单');
 
     const histAoa = [['历史薄弱题'],['标准题号','出现次数','低于阈值次数','平均得分率','阈值']];
-    histWeak.forEach(w=> histAoa.push([w.section+' '+w.no, w.occur, w.belowCount, (w.avgRate*100).toFixed(1)+'%', (w.threshold*100).toFixed(1)+'%']));
+    histWeak.forEach(w=> histAoa.push([Utils.stdLabel(w.section, w.no, w.itemType), w.occur, w.belowCount, (w.avgRate*100).toFixed(1)+'%', (w.threshold*100).toFixed(1)+'%']));
     XLSX.utils.book_append_sheet(wb, Export.sheetFromAoa(histAoa,[16,10,12,12,10],[{s:{r:0,c:0},e:{r:0,c:4}}]), '历史薄弱题');
 
     const detailAoa = [['逐题对照'],['小题','满分','本人得分','本人得分率','班均得分率']];
@@ -2579,7 +2586,7 @@ const Export = {
       const avgRate = Utils.mean(hist.map(h=>h.rate));
       const belowCount = hist.filter(h=>h.rate<th).length;
       const isWeak = weakSet.has(sk.section+'|'+sk.no);
-      matrixAoa.push([sk.section+' '+sk.no].concat(cells).concat([avgRate===null?'—':(avgRate*100).toFixed(1)+'%', belowCount, isWeak?'是':'否']));
+      matrixAoa.push([Utils.stdLabel(sk.section, sk.no, sk.itemType)].concat(cells).concat([avgRate===null?'—':(avgRate*100).toFixed(1)+'%', belowCount, isWeak?'是':'否']));
     });
     const wsMatrix = Export.sheetFromAoa(matrixAoa, [16].concat(exams.map(()=>10)).concat([12,10,12]),
       [{s:{r:0,c:0},e:{r:0,c:header.length-1}}]);
